@@ -96,16 +96,18 @@ static inline zend_string* php_libdeflate_compress(zend_string *data, zend_long 
 	}
 
 	size_t compressBound = compressBoundFunc(compressor, ZSTR_LEN(data));
-	void* output = emalloc(compressBound);
-	size_t actualSize = compressFunc(compressor, ZSTR_VAL(data), ZSTR_LEN(data), output, compressBound);
+	//compress directly into the result string to avoid an extra allocation + memcpy, then shrink it to the real size
+	zend_string* result = zend_string_alloc(compressBound, 0);
+	size_t actualSize = compressFunc(compressor, ZSTR_VAL(data), ZSTR_LEN(data), ZSTR_VAL(result), compressBound);
 
 	if (actualSize == 0){
+		zend_string_efree(result);
 		zend_throw_exception_ex(spl_ce_RuntimeException, 0, "Too small buffer provided (this is a bug)");
 		return NULL;
 	}
 
-	zend_string* result = zend_string_init(output, actualSize, 0);
-	efree(output);
+	result = zend_string_truncate(result, actualSize, 0);
+	ZSTR_VAL(result)[actualSize] = '\0';
 	return result;
 }
 
